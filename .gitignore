@@ -1,0 +1,13 @@
+# === 화이트리스트: test1 + README 만 git에 올림 ===
+/*
+!/pot_monitor/
+!/README.txt
+!/.gitignore
+
+# === test1 안에서도 빌드 산출물은 제외 (flash.bat이 자동 재생성) ===
+/pot_monitor/Debug/
+/pot_monitor/Release/
+
+# === 기타 임시 파일 ===
+*.log
+*_save
