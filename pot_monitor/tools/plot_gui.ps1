@@ -2,6 +2,7 @@
   STM32 실시간 파형 뷰어 (MATLAB 스타일, WinForms Chart)
   - COM 포트에서 raw0/flt0/raw1/flt1을 읽어 두 개의 좌표축에 라인으로 그린다.
   - 파랑 = 원본, 주황 = 필터.  최근 -Window 초(기본 10초)만 슬라이딩 표시, Y축 자동 스케일.
+  - 체크박스 "필터값만 보기": 원본을 숨기고 필터값만 표시 (σ 함께 표시).
   - 구버전 펌웨어(raw만 출력)도 동작 (필터선 = 원본선).
   사용:  plot_gui.ps1            (창 닫으면 종료)
          plot_gui.ps1 -Window 30 (30초 폭)
@@ -10,7 +11,7 @@ param(
   [string]$Port = "",
   [int]$Window = 10,       # 표시 구간 [초]
   [int]$Seconds = 0,       # 0=계속, N초 후 자동 종료(테스트용)
-  [switch]$Noise           # 시작부터 "노이즈만 보기" 모드
+  [switch]$FilterOnly      # 시작부터 "필터값만 보기" 모드
 )
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -57,36 +58,33 @@ function AddSeries([string]$name, [string]$area, $color, [int]$width) {
   $s.XValueType = 'Double'
   $script:chart.Series.Add($s); $s
 }
-$colNoise = [System.Drawing.Color]::FromArgb(126,47,142)  # MATLAB 보라
 $sR0 = AddSeries 'PA0 원본' 'A0' $colRaw 1
 $sF0 = AddSeries 'PA0 필터' 'A0' $colFlt 2
-$sN0 = AddSeries 'PA0 노이즈' 'A0' $colNoise 1
 $sR1 = AddSeries 'PA1 원본' 'A1' $colRaw 1
 $sF1 = AddSeries 'PA1 필터' 'A1' $colFlt 2
-$sN1 = AddSeries 'PA1 노이즈' 'A1' $colNoise 1
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "STM32 실시간 파형  [$Port]  파랑=원본  주황=필터  보라=노이즈"
+$form.Text = "STM32 실시간 파형  [$Port]  파랑=원본  주황=필터"
 $form.Width = 1000; $form.Height = 720; $form.BackColor = 'White'
 
 $chk = New-Object System.Windows.Forms.CheckBox
-$chk.Text = '노이즈만 보기 (원본 - 필터, 0 중심)'
+$chk.Text = '필터값만 보기 (원본 숨김)'
 $chk.AutoSize = $true; $chk.Left = 12; $chk.Top = 7; $chk.BackColor = 'White'
 $panel = New-Object System.Windows.Forms.Panel
 $panel.Height = 32; $panel.Dock = 'Top'; $panel.BackColor = 'White'
 $panel.Controls.Add($chk)
 
 function ApplyMode {
-  $on = $chk.Checked
-  $sR0.Enabled = -not $on; $sF0.Enabled = -not $on; $sN0.Enabled = $on
-  $sR1.Enabled = -not $on; $sF1.Enabled = -not $on; $sN1.Enabled = $on
+  $on = $chk.Checked                 # 켜짐 = 필터값만, 꺼짐 = 원본+필터
+  $sR0.Enabled = -not $on; $sF0.Enabled = $true
+  $sR1.Enabled = -not $on; $sF1.Enabled = $true
   if (-not $on) {
     $chart.ChartAreas['A0'].AxisY.Title = 'PA0 [카운트]'
     $chart.ChartAreas['A1'].AxisY.Title = 'PA1 [카운트]'
   }
 }
 $chk.Add_CheckedChanged({ ApplyMode })
-if ($Noise) { $chk.Checked = $true }
+if ($FilterOnly) { $chk.Checked = $true }
 ApplyMode
 
 $form.Controls.Add($chart)
@@ -109,14 +107,14 @@ function TrimAndScale([string]$area, $list, [string]$chName) {
   $pad = [Math]::Max(5, ($hi - $lo) * 0.15)
   $a.AxisY.Minimum = [Math]::Floor($lo - $pad); $a.AxisY.Maximum = [Math]::Ceiling($hi + $pad)
 
-  # 노이즈 모드: 0.5초마다 창 안의 표준편차를 Y축 제목에 표시
+  # 필터값만 보기 모드: 0.5초마다 필터값의 표준편차를 Y축 제목에 표시
   if ($chk.Checked -and ($script:tick % 10 -eq 0)) {
     $pts = $vis[0].Points
     if ($pts.Count -ge 10) {
       $m = 0.0; foreach ($pt in $pts) { $m += $pt.YValues[0] }; $m /= $pts.Count
       $v = 0.0; foreach ($pt in $pts) { $d = $pt.YValues[0] - $m; $v += $d * $d }
       $sd = [Math]::Sqrt($v / ($pts.Count - 1))
-      $a.AxisY.Title = ('{0} 노이즈 [카운트]   σ = {1:F2}' -f $chName, $sd)
+      $a.AxisY.Title = ('{0} 필터 [카운트]   σ = {1:F2}' -f $chName, $sd)
     }
   }
 }
@@ -137,12 +135,12 @@ $timer.Add_Tick({
       $r0=[double]$Matches[1]; $f0=$r0; $r1=[double]$Matches[2]; $f1=$r1
     } else { continue }
     $t = $script:n / 100.0; $script:n++
-    [void]$sR0.Points.AddXY($t, $r0); [void]$sF0.Points.AddXY($t, $f0); [void]$sN0.Points.AddXY($t, $r0 - $f0)
-    [void]$sR1.Points.AddXY($t, $r1); [void]$sF1.Points.AddXY($t, $f1); [void]$sN1.Points.AddXY($t, $r1 - $f1)
+    [void]$sR0.Points.AddXY($t, $r0); [void]$sF0.Points.AddXY($t, $f0)
+    [void]$sR1.Points.AddXY($t, $r1); [void]$sF1.Points.AddXY($t, $f1)
   }
   $script:tick++
-  TrimAndScale 'A0' @($sR0, $sF0, $sN0) 'PA0'
-  TrimAndScale 'A1' @($sR1, $sF1, $sN1) 'PA1'
+  TrimAndScale 'A0' @($sR0, $sF0) 'PA0'
+  TrimAndScale 'A1' @($sR1, $sF1) 'PA1'
 })
 
 if ($Seconds -gt 0) {
