@@ -37,6 +37,25 @@
            σ(표준편차)가 0.5초마다 갱신되어 표시
   최근 10초만 슬라이딩 표시, 세로축 자동 스케일.
 
+■ ROS2 연동 (ros2\pot_monitor_ros2)
+
+  설치:
+    cp -r ros2/pot_monitor_ros2 ~/ros2_ws/src/
+    cd ~/ros2_ws && colcon build --packages-select pot_monitor_ros2
+    source install/setup.bash
+
+  실행:
+    ros2 run pot_monitor_ros2 pot_publisher
+    (보드 자동 탐색. 수동 지정: --ros-args -p port:=/dev/ttyACM0)
+
+  구독 토픽:
+    /pot/flt0   std_msgs/Float32   PA0 필터값, 0~4095, 약 100 Hz
+    /pot/flt1   std_msgs/Float32   PA1 필터값
+
+  확인:
+    ros2 topic echo /pot/flt0
+    python3 ros2/pot_view.py          (두 값을 한 화면에)
+
 ■ 자주 바꾸는 값 (main.c 상단 #define)
   HAL_Delay(10)        출력 주기. 10=초당 100회, 100=초당 10회
   FILT_EMA_SHIFT (3)   필터 강도. 클수록 부드럽고 느림 (3=÷8, 4=÷16)
@@ -55,6 +74,7 @@
   tools\              read/plot 스크립트 (지우지 말 것)
   Debug\              빌드 산출물 (자동 생성)
   나머지(.project 등)  CubeIDE/CubeMX 관리 — 수정·이동 금지
+  ..\ros2\            ROS2 노드 패키지 + 뷰어 (위 ROS2 연동 참고)
 
 ■ 필터 구성
   측정 신호에서 일반 잡음과 순간적인 튐 현상이 함께 발생.

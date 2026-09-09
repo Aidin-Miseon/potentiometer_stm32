@@ -1,6 +1,7 @@
 # === 화이트리스트: test1 + README 만 git에 올림 ===
 /*
 !/pot_monitor/
+!/ros2/
 !/README.txt
 !/.gitignore
 
