@@ -11,6 +11,7 @@ param(
   [string]$Port = "",
   [int]$Window = 10,       # 표시 구간 [초]
   [int]$Seconds = 0,       # 0=계속, N초 후 자동 종료(테스트용)
+  [int]$SampleHz = 100,    # 보드 출력 주파수 (1kHz 펌웨어면 1000. 화면은 항상 ~100Hz로 데시메이션)
   [switch]$FilterOnly      # 시작부터 "필터값만 보기" 모드
 )
 
@@ -44,7 +45,7 @@ foreach ($nm in @('A0','A1')) {
   $a.AxisX.MajorGrid.LineColor = $colGrid; $a.AxisY.MajorGrid.LineColor = $colGrid
   $a.AxisX.LineColor = 'Black'; $a.AxisY.LineColor = 'Black'
   $a.AxisX.LabelStyle.Format = '0.0'
-  $a.AxisX.Title = '시간 [s]  (100 Hz 기준)'
+  $a.AxisX.Title = "시간 [s]  ($SampleHz Hz 수신)"
   $a.AxisY.Title = if ($nm -eq 'A0') { 'PA0 [카운트]' } else { 'PA1 [카운트]' }
   $a.AxisX.TitleFont = New-Object System.Drawing.Font('Segoe UI',9)
   $a.AxisY.TitleFont = New-Object System.Drawing.Font('Segoe UI',9)
@@ -90,12 +91,13 @@ ApplyMode
 $form.Controls.Add($chart)
 $form.Controls.Add($panel)
 
-$script:acc = ''      # 시리얼 수신 버퍼 (줄 조립용)
-$script:n   = 0       # 샘플 카운터 → t = n/100
+$script:acc   = ''    # 시리얼 수신 버퍼 (줄 조립용)
+$script:n     = 0     # 샘플 카운터 → t = n/SampleHz
+$script:decim = [Math]::Max(1, [int]($SampleHz / 100))   # 화면 표시용 데시메이션 (약 100Hz)
 
 $script:tick = 0
 function TrimAndScale([string]$area, $list, [string]$chName) {
-  $tMax = $script:n / 100.0
+  $tMax = $script:n / [double]$SampleHz
   $tMin = [Math]::Max(0, $tMax - $Window)
   foreach ($s in $list) { while ($s.Points.Count -gt 0 -and $s.Points[0].XValue -lt $tMin) { $s.Points.RemoveAt(0) } }
   $vis = @($list | Where-Object { $_.Enabled })
@@ -134,7 +136,8 @@ $timer.Add_Tick({
     } elseif ($line -match 'raw0=\s*(\d+).*raw1=\s*(\d+)') {
       $r0=[double]$Matches[1]; $f0=$r0; $r1=[double]$Matches[2]; $f1=$r1
     } else { continue }
-    $t = $script:n / 100.0; $script:n++
+    $t = $script:n / [double]$SampleHz; $script:n++
+    if ((($script:n - 1) % $script:decim) -ne 0) { continue }   # 화면은 ~100Hz만 그림
     [void]$sR0.Points.AddXY($t, $r0); [void]$sF0.Points.AddXY($t, $f0)
     [void]$sR1.Points.AddXY($t, $r1); [void]$sF1.Points.AddXY($t, $f1)
   }

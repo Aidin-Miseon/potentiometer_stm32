@@ -54,7 +54,7 @@
  * 1단: 최근 3샘플의 중앙값 → 단발 스파이크 제거
  * 2단: 1차 저역통과 filt += (med - filt)/8 → 잔노이즈 평활 (실측: σ 5.8 → 약 1.5)
  * 출력의 flt0/flt1이 필터 결과. 반응 속도를 높이려면 SHIFT를 2(=/4)로 낮출 것. */
-#define FILT_EMA_SHIFT      3U      /* EMA 분모 = 2^3 = 8 */
+#define FILT_EMA_SHIFT      6U      /* EMA 분모 = 2^6 = 64. 1kHz 기준 τ≈64ms */
 
 /* --- 클럭 자동 설정 ---
  * 보드 크리스탈(HSE) 주파수를 부팅 시 직접 측정해서 PLL을 맞춘다.
@@ -251,7 +251,13 @@ int main(void)
       CDC_Printf("%s | %s\r\n", s0, s1);
     }
 
-    HAL_Delay(10);     /* 샘플·출력 주기 10 ms = 초당 100회 */
+    /* 1 kHz 페이싱: 다음 1ms 틱까지 대기.
+       (HAL_Delay(1)은 틱 반올림 때문에 1~2ms가 걸려 실제로는 ~500Hz밖에 안 나옴) */
+    {
+      static uint32_t last_tick = 0U;
+      while (HAL_GetTick() == last_tick) { }
+      last_tick = HAL_GetTick();
+    }
   }
   /* USER CODE END 3 */
 }
